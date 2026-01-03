@@ -1,107 +1,165 @@
--- FPS BOOST + ESP PLAYERS + ESP ARMA
+-- FPS BOOST + AIM ASSIST COMPACTO + ESP MM2
+local P=game:GetService("Players");local R=game:GetService("RunService")
+local W=workspace;local LP=P.LocalPlayer;local C=W.CurrentCamera
 
-local P=game:GetService("Players")
-local R=game:GetService("RunService")
-local W=workspace
-local L=game:GetService("Lighting")
-local LP=P.LocalPlayer
-
--- ===== FPS BOOST =====
+-- GRÁFICOS LEVES
 pcall(function() settings().Rendering.QualityLevel=Enum.QualityLevel.Level01 end)
-L.GlobalShadows=false
-L.FogEnd=1e9
-L.Brightness=0
-L.EnvironmentDiffuseScale=0
-L.EnvironmentSpecularScale=0
+local L=game:GetService("Lighting")
+L.GlobalShadows=false;L.FogEnd=1e9;L.Brightness=0
+L.EnvironmentDiffuseScale=0;L.EnvironmentSpecularScale=0
 L.OutdoorAmbient=Color3.new(0,0,0)
 for _,v in ipairs(L:GetChildren()) do
 	if v:IsA("PostEffect") or v:IsA("Atmosphere") then v:Destroy() end
 end
 
--- ===== ESP CORES =====
-local TEAM_COLORS={
-	Assassino=Color3.fromRGB(255,0,0),
-	Xerife=Color3.fromRGB(0,120,255),
-	Inocente=Color3.fromRGB(0,255,0)
-}
-local WEAPON_COLOR=Color3.fromRGB(255,255,0)
+-- REMOVE DECORAÇÕES
+local nomesDeco={"tree","arvore","plant","bush","folha","leaf","palm","rock","pedra","decor","prop"}
+local function isDeco(o)
+	for _,n in ipairs(nomesDeco) do
+		if o.Name:lower():find(n) then return true end
+	end
+	return false
+end
+local function opt(o)
+	if LP.Character and o:IsDescendantOf(LP.Character) then return end
+	if o:IsA("BasePart") then
+		o.Material=Enum.Material.Plastic
+		o.Reflectance=0
+		o.CastShadow=false
+		if isDeco(o) then o:Destroy() end
+	elseif o:IsA("Decal") or o:IsA("Texture") then
+		o:Destroy()
+	elseif o:IsA("ParticleEmitter") or o:IsA("Trail")
+	or o:IsA("Fire") or o:IsA("Smoke") or o:IsA("Sparkles") then
+		o:Destroy()
+	elseif (o:IsA("Model") or o:IsA("Folder")) and isDeco(o) then
+		o:Destroy()
+	end
+end
+for _,v in ipairs(W:GetDescendants()) do opt(v) end
+W.DescendantAdded:Connect(function(v) task.wait();opt(v) end)
 
--- ===== ESP PLAYER =====
-local function clearESP(char)
+-- LIMPA ROUPAS
+local function cleanChar(c)
+	if c==LP.Character then return end
+	for _,v in ipairs(c:GetDescendants()) do
+		if v:IsA("Accessory") or v:IsA("Clothing") then v:Destroy() end
+	end
+end
+for _,p in ipairs(P:GetPlayers()) do if p.Character then cleanChar(p.Character) end end
+P.PlayerAdded:Connect(function(p) p.CharacterAdded:Connect(cleanChar) end)
+
+-- FPS COUNTER
+local gui=Instance.new("ScreenGui",LP.PlayerGui);gui.ResetOnSpawn=false
+local lbl=Instance.new("TextLabel",gui)
+lbl.Size=UDim2.fromScale(0.1,0.05)
+lbl.Position=UDim2.new(0,10,0,10)
+lbl.BackgroundTransparency=1
+lbl.TextColor3=Color3.fromRGB(0,255,0)
+lbl.Font=Enum.Font.SourceSansBold
+lbl.TextSize=18
+local fc,lt=0,tick()
+R.RenderStepped:Connect(function()
+	fc+=1
+	if tick()-lt>=1 then lbl.Text="FPS: "..fc;fc=0;lt=tick() end
+end)
+
+-- AIM ASSIST (INALTERADO)
+local FOV=10;local assist=0.1
+R.RenderStepped:Connect(function()
+	if not LP.Character or not LP.Character:FindFirstChild("HumanoidRootPart") then return end
+	local closest=FOV;local target
+	for _,p in ipairs(P:GetPlayers()) do
+		if p~=LP and p.Character and p.Character:FindFirstChild("Head") then
+			local pos,on=C:WorldToViewportPoint(p.Character.Head.Position)
+			if on then
+				local center=Vector2.new(C.ViewportSize.X/2,C.ViewportSize.Y/2)
+				local dist=(Vector2.new(pos.X,pos.Y)-center).Magnitude
+				if dist<closest then closest=dist;target=p.Character.Head.Position end
+			end
+		end
+	end
+	if target then
+		local dir=(target-C.CFrame.Position).Unit
+		C.CFrame=CFrame.new(C.CFrame.Position,C.CFrame.Position+dir:Lerp(dir,assist))
+	end
+end)
+
+-- ===== ESP PLAYERS (ASSASSINO / XERIFE / INOCENTE) =====
+local function clearRoleESP(char)
 	for _,v in ipairs(char:GetChildren()) do
-		if v:IsA("Highlight") then v:Destroy() end
+		if v:IsA("Highlight") and v.Name=="RoleESP" then v:Destroy() end
 	end
 end
 
-local function applyPlayerESP(p)
-	if p==LP or not p.Character or not p.Team then return end
-	local color=TEAM_COLORS[p.Team.Name]
-	if not color then return end
+local function detectRole(player)
+	local isMurderer=false
+	local isSheriff=false
 
-	clearESP(p.Character)
+	local function check(container)
+		for _,v in ipairs(container:GetChildren()) do
+			if v:IsA("Tool") then
+				local n=v.Name:lower()
+				if n:find("knife") then isMurderer=true end
+				if n:find("gun") then isSheriff=true end
+			end
+		end
+	end
 
-	local h=Instance.new("Highlight")
-	h.Name="ESP_PLAYER"
-	h.Adornee=p.Character
-	h.FillTransparency=1
-	h.OutlineTransparency=0
-	h.OutlineColor=color
-	h.Parent=p.Character
+	if player.Character then check(player.Character) end
+	check(player.Backpack)
+
+	if isMurderer then return "Murderer" end
+	if isSheriff then return "Sheriff" end
+	return "Innocent"
 end
 
--- ===== ESP ARMA =====
-local function applyWeaponESP(tool)
-	if not tool:IsA("Tool") then return end
-	if tool:FindFirstChild("ESP_WEAPON") then return end
+local ROLE_COLOR={
+	Murderer=Color3.fromRGB(255,0,0),
+	Sheriff=Color3.fromRGB(0,120,255),
+	Innocent=Color3.fromRGB(0,255,0)
+}
 
+local function applyRoleESP(player)
+	if player==LP or not player.Character then return end
+	local char=player.Character
+	clearRoleESP(char)
+
+	local role=detectRole(player)
 	local h=Instance.new("Highlight")
-	h.Name="ESP_WEAPON"
+	h.Name="RoleESP"
+	h.Adornee=char
+	h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
+	h.FillTransparency=1
+	h.OutlineTransparency=0
+	h.OutlineColor=ROLE_COLOR[role]
+	h.Parent=char
+end
+
+-- ===== ESP DA ARMA (MÃO + CHÃO) =====
+local function weaponESP(tool)
+	if not tool:IsA("Tool") then return end
+	if tool:FindFirstChild("WeaponESP") then return end
+	local h=Instance.new("Highlight")
+	h.Name="WeaponESP"
 	h.Adornee=tool
 	h.FillTransparency=1
 	h.OutlineTransparency=0
-	h.OutlineColor=WEAPON_COLOR
+	h.OutlineColor=Color3.fromRGB(255,255,0)
 	h.Parent=tool
 end
 
--- arma no chão
 for _,v in ipairs(W:GetDescendants()) do
-	if v:IsA("Tool") then applyWeaponESP(v) end
+	if v:IsA("Tool") then weaponESP(v) end
 end
-
 W.DescendantAdded:Connect(function(v)
 	task.wait()
-	if v:IsA("Tool") then applyWeaponESP(v) end
+	if v:IsA("Tool") then weaponESP(v) end
 end)
 
--- arma na mão do xerife
-local function onChar(char,p)
-	if p.Team and p.Team.Name=="Xerife" then
-		for _,v in ipairs(char:GetChildren()) do
-			if v:IsA("Tool") then applyWeaponESP(v) end
-		end
-		char.ChildAdded:Connect(function(v)
-			if v:IsA("Tool") then applyWeaponESP(v) end
-		end)
+-- UPDATE CONTÍNUO
+R.RenderStepped:Connect(function()
+	for _,p in ipairs(P:GetPlayers()) do
+		applyRoleESP(p)
 	end
-end
-
--- ===== HANDLERS =====
-for _,p in ipairs(P:GetPlayers()) do
-	if p.Character then
-		applyPlayerESP(p)
-		onChar(p.Character,p)
-	end
-	p.CharacterAdded:Connect(function(c)
-		task.wait(1)
-		applyPlayerESP(p)
-		onChar(c,p)
-	end)
-end
-
-P.PlayerAdded:Connect(function(p)
-	p.CharacterAdded:Connect(function(c)
-		task.wait(1)
-		applyPlayerESP(p)
-		onChar(c,p)
-	end)
 end)
