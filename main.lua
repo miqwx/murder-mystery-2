@@ -1,4 +1,4 @@
--- FPS BOOST + AIM ASSIST + ESP XERIFE / ASSASSINO
+-- FPS BOOST + AIM ASSIST + ESP MM2 (ASSASSINO / XERIFE / INOCENTE)
 local P=game:GetService("Players")
 local R=game:GetService("RunService")
 local W=workspace
@@ -45,17 +45,7 @@ end
 for _,v in ipairs(W:GetDescendants()) do opt(v) end
 W.DescendantAdded:Connect(function(v) task.wait();opt(v) end)
 
--- REMOVE ROUPAS / ACESSÓRIOS
-local function cleanChar(c)
-    if c==LP.Character then return end
-    for _,v in ipairs(c:GetDescendants()) do
-        if v:IsA("Accessory") or v:IsA("Clothing") then v:Destroy() end
-    end
-end
-for _,p in ipairs(P:GetPlayers()) do if p.Character then cleanChar(p.Character) end end
-P.PlayerAdded:Connect(function(p) p.CharacterAdded:Connect(cleanChar) end)
-
--- FPS
+-- FPS COUNTER
 local gui=Instance.new("ScreenGui",LP.PlayerGui)
 gui.ResetOnSpawn=false
 local lbl=Instance.new("TextLabel",gui)
@@ -68,11 +58,7 @@ lbl.TextSize=18
 local fc,lt=0,tick()
 R.RenderStepped:Connect(function()
     fc+=1
-    if tick()-lt>=1 then
-        lbl.Text="FPS: "..fc
-        fc=0
-        lt=tick()
-    end
+    if tick()-lt>=1 then lbl.Text="FPS: "..fc;fc=0;lt=tick() end
 end)
 
 -- AIM ASSIST (INALTERADO)
@@ -101,22 +87,32 @@ R.RenderStepped:Connect(function()
     end
 end)
 
--- ===== ESP XERIFE / ASSASSINO =====
-local function removeESP(char)
-    if char:FindFirstChild("RoleESP") then
-        char.RoleESP:Destroy()
-    end
+-- ===== ESP PAPÉIS =====
+local function clearESP(obj)
+    if obj:FindFirstChild("RoleESP") then obj.RoleESP:Destroy() end
 end
 
-local function applyESP(player)
+local function makeESP(obj,color,name)
+    clearESP(obj)
+    local h=Instance.new("Highlight")
+    h.Name=name or "RoleESP"
+    h.Adornee=obj
+    h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
+    h.FillTransparency=1
+    h.OutlineTransparency=0
+    h.OutlineColor=color
+    h.Parent=obj
+end
+
+local function checkPlayer(player)
     if player==LP or not player.Character then return end
     local char=player.Character
-    removeESP(char)
+    clearESP(char)
 
     local isMurderer=false
     local isSheriff=false
 
-    local function check(container)
+    local function scan(container)
         for _,v in ipairs(container:GetChildren()) do
             if v:IsA("Tool") then
                 local n=v.Name:lower()
@@ -126,45 +122,46 @@ local function applyESP(player)
         end
     end
 
-    check(player.Backpack)
-    check(char)
+    scan(player.Backpack)
+    scan(char)
 
-    if not (isMurderer or isSheriff) then return end
-
-    local h=Instance.new("Highlight")
-    h.Name="RoleESP"
-    h.Adornee=char
-    h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
-    h.FillTransparency=1
-    h.OutlineTransparency=0
-    h.OutlineColor = isMurderer and Color3.fromRGB(255,0,0)
-        or Color3.fromRGB(0,120,255)
-    h.Parent=char
-end
-
--- ESP NA ARMA NO CHÃO
-local function gunESP(tool)
-    if tool:FindFirstChild("GunESP") then return end
-    local h=Instance.new("Highlight")
-    h.Name="GunESP"
-    h.Adornee=tool
-    h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
-    h.FillTransparency=1
-    h.OutlineTransparency=0
-    h.OutlineColor=Color3.fromRGB(0,200,255)
-    h.Parent=tool
-end
-
-R.RenderStepped:Connect(function()
-    for _,p in ipairs(P:GetPlayers()) do
-        applyESP(p)
+    if isMurderer then
+        makeESP(char,Color3.fromRGB(255,0,0))      -- 🔴 Assassino
+    elseif isSheriff then
+        makeESP(char,Color3.fromRGB(0,120,255))    -- 🔵 Xerife
+    else
+        makeESP(char,Color3.fromRGB(0,255,0))      -- 🟢 Inocente
     end
-    for _,v in ipairs(W:GetDescendants()) do
-        if v:IsA("Tool") then
-            local n=v.Name:lower()
-            if n:find("gun") or n:find("revolver") then
-                gunESP(v)
-            end
+end
+
+-- ESP ARMA NO CHÃO
+local function checkGroundWeapon(obj)
+    if obj:FindFirstChild("GunESP") then return end
+    local n=obj.Name:lower()
+    if n:find("gun") or n:find("revolver") then
+        if obj:IsA("Tool") or (obj:IsA("Model") and obj:FindFirstChild("Handle")) then
+            makeESP(obj,Color3.fromRGB(0,200,255),"GunESP")
         end
     end
+end
+
+-- PLAYERS
+for _,p in ipairs(P:GetPlayers()) do
+    if p.Character then checkPlayer(p) end
+    p.CharacterAdded:Connect(function()
+        task.wait(0.3)
+        checkPlayer(p)
+    end)
+end
+P.PlayerAdded:Connect(function(p)
+    p.CharacterAdded:Connect(function()
+        task.wait(0.3)
+        checkPlayer(p)
+    end)
+end)
+
+-- ARMA NO CHÃO (SEM LAG)
+W.DescendantAdded:Connect(function(obj)
+    task.wait()
+    checkGroundWeapon(obj)
 end)
