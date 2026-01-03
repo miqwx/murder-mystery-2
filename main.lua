@@ -1,12 +1,13 @@
--- FPS BOOST + AIM ASSIST + ESP MM2 (ASSASSINO / XERIFE / INOCENTE)
+-- FPS BOOST + AIM ASSIST + ESP POR TEAM (MM2-LIKE)
 local P=game:GetService("Players")
 local R=game:GetService("RunService")
 local W=workspace
 local LP=P.LocalPlayer
 local C=W.CurrentCamera
 local L=game:GetService("Lighting")
+local Teams=game:GetService("Teams")
 
--- GRÁFICOS LEVES
+-- ===== GRÁFICOS LEVES =====
 pcall(function() settings().Rendering.QualityLevel=Enum.QualityLevel.Level01 end)
 L.GlobalShadows=false
 L.FogEnd=1e9
@@ -18,13 +19,12 @@ for _,v in ipairs(L:GetChildren()) do
     if v:IsA("PostEffect") or v:IsA("Atmosphere") then v:Destroy() end
 end
 
--- REMOVE DECORAÇÕES
+-- ===== REMOVE DECORAÇÕES =====
 local nomesDeco={"tree","arvore","plant","bush","folha","leaf","palm","rock","pedra","decor","prop"}
 local function isDeco(o)
     for _,n in ipairs(nomesDeco) do
         if o.Name:lower():find(n) then return true end
     end
-    return false
 end
 local function opt(o)
     if LP.Character and o:IsDescendantOf(LP.Character) then return end
@@ -33,9 +33,8 @@ local function opt(o)
         o.Reflectance=0
         o.CastShadow=false
         if isDeco(o) then o:Destroy() end
-    elseif o:IsA("Decal") or o:IsA("Texture") then
-        o:Destroy()
-    elseif o:IsA("ParticleEmitter") or o:IsA("Trail")
+    elseif o:IsA("Decal") or o:IsA("Texture")
+    or o:IsA("ParticleEmitter") or o:IsA("Trail")
     or o:IsA("Fire") or o:IsA("Smoke") or o:IsA("Sparkles") then
         o:Destroy()
     elseif (o:IsA("Model") or o:IsA("Folder")) and isDeco(o) then
@@ -45,7 +44,7 @@ end
 for _,v in ipairs(W:GetDescendants()) do opt(v) end
 W.DescendantAdded:Connect(function(v) task.wait();opt(v) end)
 
--- FPS COUNTER
+-- ===== FPS COUNTER =====
 local gui=Instance.new("ScreenGui",LP.PlayerGui)
 gui.ResetOnSpawn=false
 local lbl=Instance.new("TextLabel",gui)
@@ -61,7 +60,7 @@ R.RenderStepped:Connect(function()
     if tick()-lt>=1 then lbl.Text="FPS: "..fc;fc=0;lt=tick() end
 end)
 
--- AIM ASSIST (INALTERADO)
+-- ===== AIM ASSIST (INALTERADO) =====
 local FOV=10
 local assist=0.1
 R.RenderStepped:Connect(function()
@@ -74,10 +73,7 @@ R.RenderStepped:Connect(function()
             if on then
                 local center=Vector2.new(C.ViewportSize.X/2,C.ViewportSize.Y/2)
                 local dist=(Vector2.new(pos.X,pos.Y)-center).Magnitude
-                if dist<closest then
-                    closest=dist
-                    target=p.Character.Head.Position
-                end
+                if dist<closest then closest=dist;target=p.Character.Head.Position end
             end
         end
     end
@@ -87,7 +83,7 @@ R.RenderStepped:Connect(function()
     end
 end)
 
--- ===== ESP PAPÉIS =====
+-- ===== ESP POR TEAM (SEM LOBBY) =====
 local function clearESP(obj)
     if obj:FindFirstChild("RoleESP") then obj.RoleESP:Destroy() end
 end
@@ -104,64 +100,55 @@ local function makeESP(obj,color,name)
     h.Parent=obj
 end
 
-local function checkPlayer(player)
+local function updatePlayerESP(player)
     if player==LP or not player.Character then return end
     local char=player.Character
     clearESP(char)
 
-    local isMurderer=false
-    local isSheriff=false
+    if not player.Team then return end
+    local t=player.Team.Name:lower()
+    if t:find("lobby") then return end
 
-    local function scan(container)
-        for _,v in ipairs(container:GetChildren()) do
-            if v:IsA("Tool") then
-                local n=v.Name:lower()
-                if n:find("knife") then isMurderer=true end
-                if n:find("gun") or n:find("revolver") then isSheriff=true end
-            end
-        end
-    end
-
-    scan(player.Backpack)
-    scan(char)
-
-    if isMurderer then
-        makeESP(char,Color3.fromRGB(255,0,0))      -- 🔴 Assassino
-    elseif isSheriff then
-        makeESP(char,Color3.fromRGB(0,120,255))    -- 🔵 Xerife
-    else
-        makeESP(char,Color3.fromRGB(0,255,0))      -- 🟢 Inocente
+    if t:find("murder") then
+        makeESP(char,Color3.fromRGB(255,0,0))        -- 🔴 Assassino
+    elseif t:find("sheriff") then
+        makeESP(char,Color3.fromRGB(0,120,255))      -- 🔵 Xerife
+    elseif t:find("innocent") then
+        makeESP(char,Color3.fromRGB(0,255,0))        -- 🟢 Inocente
     end
 end
 
--- ESP ARMA NO CHÃO
-local function checkGroundWeapon(obj)
-    if obj:FindFirstChild("GunESP") then return end
-    local n=obj.Name:lower()
-    if n:find("gun") or n:find("revolver") then
-        if obj:IsA("Tool") or (obj:IsA("Model") and obj:FindFirstChild("Handle")) then
-            makeESP(obj,Color3.fromRGB(0,200,255),"GunESP")
-        end
-    end
-end
-
--- PLAYERS
 for _,p in ipairs(P:GetPlayers()) do
-    if p.Character then checkPlayer(p) end
+    if p.Character then updatePlayerESP(p) end
     p.CharacterAdded:Connect(function()
-        task.wait(0.3)
-        checkPlayer(p)
+        task.wait(0.2)
+        updatePlayerESP(p)
+    end)
+    p:GetPropertyChangedSignal("Team"):Connect(function()
+        task.wait()
+        updatePlayerESP(p)
     end)
 end
+
 P.PlayerAdded:Connect(function(p)
     p.CharacterAdded:Connect(function()
-        task.wait(0.3)
-        checkPlayer(p)
+        task.wait(0.2)
+        updatePlayerESP(p)
     end)
 end)
 
--- ARMA NO CHÃO (SEM LAG)
+-- ===== ESP ARMA NO CHÃO =====
+local function groundGunESP(obj)
+    if obj:FindFirstChild("GunESP") then return end
+    local n=obj.Name:lower()
+    if n:find("gun") or n:find("revolver") then
+        makeESP(obj,Color3.fromRGB(0,200,255),"GunESP")
+    end
+end
+
 W.DescendantAdded:Connect(function(obj)
     task.wait()
-    checkGroundWeapon(obj)
+    if obj:IsA("Tool") or obj:IsA("Model") then
+        groundGunESP(obj)
+    end
 end)
